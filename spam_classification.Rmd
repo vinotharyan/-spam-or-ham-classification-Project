@@ -1,0 +1,256 @@
+---
+title: "Spam or Ham Classfication Project"
+author: "Vinoth Aryan Nagabosshanam"
+date: "March 26, 2017"
+output:
+  word_document: default
+  pdf_document: default
+---
+#Abstract
+Build a machine learning model to predicted accurately classify which texts are spam or ham
+
+## Data Description 
+*** The dataset can be downloaded at http://www.dt.fee.unicamp.br/~tiago/smsspamcollection/, through the UCI Machine Learning Repository or through Kaggle.***
+
+The Data contain one message per line.
+Each line is composed by two columns: 
+
+**v1: contains the label (ham or spam) **
+**v2 : contains the raw text **
+
+
+** import the data file **
+```{r}
+sms_data<-read.csv("B:\\Spam_or_Ham\\sms-spam-collection-dataset\\spam.csv")
+str(sms_data)
+
+```
+** there total five variables but we are going to use only the  two variables V1 and v2 and remove the remaining three variables**
+
+The following code used to remove the three colunms
+```{r}
+sms_data<-sms_data[ ,-c(3:5)]
+# rechange the colunm names 
+colnames(sms_data)<-c("label","text")
+str(sms_data)
+# step to convert the label as factore
+sms_data$label<-as.factor(sms_data$label)
+summary(sms_data$label)
+```
+
+# Data Preprocessing
+## Building a corpus
+
+Let's now build a corpus out of this vector of strings. A corpus is a collection of documents, but it's also important to know that in the tm domain, R recognizes it as a separate data type.
+
+There are two kinds of the corpus data type, the permanent corpus, i.e. PCorpus, and the volatile corpus, i.e. VCorpus. In essence, the difference between the two has to do with how the collection of documents is stored in your computer. We will use the volatile corpus, which is held in computer's RAM rather than saved to disk, just to be more memory efficient.
+
+To make a volatile corpus, R needs to interpret each element in our vector of text, text, as a document. And the tm package provides what are called Source functions to do just that! In this exercise, we'll use a Source function called vectorSource() because our text data is contained in a vector. The output of this function is called a Source object.
+
+```{r echo=FALSE, results='hide',message=FALSE}
+
+#install.packages("tm")
+library(tm)
+# the tm library is loaded
+
+# Make a vector source
+sms_cor <- VectorSource(sms_data$text)
+
+```
+
+Now that we've converted our vector to a Source object, we pass it to another tm function, VCorpus(), to create our volatile corpus. The VCorpus object is a nested list, or list of lists. At each index of the VCorpus object, there is a PlainTextDocument object, which is essentially a list that contains the actual text data (content), as well as some corresponding metadata (meta) which can help to visualize a VCorpus object and to conceptualize the whole thing.
+
+```{r}
+# Make a volatile corpus: sms_corpus
+sms_corpus <- VCorpus(sms_cor)
+# Print out the sms_corpus
+sms_corpus
+
+
+sms_data$label[1:4]
+# Check the text in some messages and their type
+lapply(sms_corpus[1:4], as.character)
+
+sms_corpus[[23]][1]
+sms_data$label[23]
+
+```
+
+#Cleaning and preprocessing of the text
+After obtaining the corpus, usually, the next step will be cleaning and preprocessing of the text. For this endeavor we are mostly going to use functions from the tm and qdap packages. In bag of words text mining, cleaning helps aggregate terms. For example, it may make sense that the words "miner", "mining" and "mine" should be considered one term. Specific preprocessing steps will vary based on the project. For example, the words used in tweets are vastly different than those used in legal documents, so the cleaning process can also be quite different.
+
+Common preprocessing functions include:
+
+####tolower(): Make all characters lowercase
+####removePunctuation(): Remove all punctuation marks
+####removeNumbers(): Remove numbers
+####stripWhitespace(): Remove excess whitespace
+#### tolower() is part of base R, while the other three functions come from the tm package.
+
+```{r echo=FALSE, results='hide',message=FALSE}
+corpus_clean <- tm_map(sms_corpus, removeWords,c(stopwords("english")))
+corpus_clean <- tm_map(corpus_clean, removeNumbers)
+corpus_clean <- tm_map(corpus_clean, removePunctuation)
+corpus_clean <- tm_map(corpus_clean, content_transformer(tolower))
+corpus_clean <- tm_map(corpus_clean, stripWhitespace)
+corpus_clean <- tm_map(corpus_clean, removeNumbers)
+#install.packages("SnowballC")
+# Load package
+library(SnowballC)
+corpus_clean <- tm_map(corpus_clean, stemDocument)
+
+inspect(corpus_clean[1:3])
+```
+
+
+
+
+## Making a document-term matrix
+The document-term matrix is used when you want to have each document represented as a row. This can be useful if you are comparing authors within rows, or the data is arranged chronologically and you want to preserve the time series.
+
+```{r}
+# Create Document Term Matrix
+d_sms <- DocumentTermMatrix(corpus_clean)
+
+d_sms
+
+
+```
+
+
+# Data visualization
+```{ r echo=FALSE, results='hide',message=FALSE}
+#library(plotly)
+#b<-barchart(sms_data$label,horizontal=F,col=c('red','green'),ylab='count',main='Barchart')
+#b
+```
+
+**We can easily create a wordcloud by using the wordcloud() function from the wordcloud package**
+```{r}
+library(wordcloud)
+wordcloud(corpus_clean, max.words=100,scale=c(3,1),colors=brewer.pal(6,"Dark2"))
+
+wordcloud(corpus_clean, 
+          min.freq = 100,
+          random.order = FALSE, 
+          colors = brewer.pal(6,"Dark2")
+          )
+
+library(readr)
+# look at words that appear atleast 200 times
+findFreqTerms(d_sms, lowfreq = 200)
+s_word <- removeSparseTerms(d_sms, 0.995)
+s_word
+
+
+#organizing frequency of terms
+freqen <- colSums(as.matrix(s_word))
+length(freqen)
+
+
+wf <- data.frame(word = names(freqen), freq = freqen)
+head(wf)
+
+
+
+##Let's create the word cloud  spam to understand
+
+spamcloud<- which(sms_data$label=="spam")
+
+wordcloud(corpus_clean[spamcloud],min.freq=30 ,colors = brewer.pal(6,"Dark2"))
+
+
+
+
+```
+
+### Distribution based on  SMS -Length
+```{r}
+library(ggplot2)
+library(stringr)
+sms_data_length<-str_length(sms_data$text)
+summary(sms_data_length)
+ggplot(sms_data,aes(x=sms_data_length,fill=sms_data$label))+geom_histogram(binwidth=5)+scale_fill_manual(values=c("#ff7f80","#003787"))+labs("Distribution based SMS length")
+```
+
+
+# forming training and test data
+
+```{r}
+s_word <- as.data.frame(as.matrix(s_word))
+#str(s_word)
+colnames(s_word) <- make.names(colnames(s_word))
+s_word$label <- sms_data$label
+#s_word$label
+
+### Finding Frequent Terms
+freq_6<-findFreqTerms(d_sms,6)
+length(freq_6)
+freq_6[1:10]
+```
+# Traning and Test Data forming
+```{r}
+corpus_train<-corpus_clean[1:4150]
+corpus_test<-corpus_clean[4151:5572]
+
+
+spam_dtrain<-d_sms[1:4150,]
+spam_dtest<-d_sms[4151:5572,]
+
+spam_dtrain_label<-sms_data[1:4150,]$label
+spam_dtest_label<-sms_data[4151:5572,]$label
+prop.table(table(spam_dtrain_label))
+prop.table(table(spam_dtest_label))
+
+
+dtm_train<- spam_dtrain[, freq_6]
+
+dim(dtm_train)
+dtm_test<- spam_dtest[,freq_6]
+
+dim(dtm_test)
+
+```
+
+#Convert numeric values into categorical values
+In order to use the Naive Bayes classifier we need to convert the numerical features in our Document Term Matrix (DTM) to categorical features.
+
+We will convert the numeric features by creating a function that converts any non-zero positive value to "Yes" and all zero values to "No" to indicate whether a specific term is present in the document.
+```{r}
+pre <- function(x) {
+  y <- ifelse(x > 0, "yes","no")
+    y
+}
+
+train<- apply(dtm_train, 2, pre)
+
+test <- apply(dtm_test, 2, pre)
+test[1:10,450:456]
+
+```
+
+
+
+#buliding a model using Naive bayes 
+```{r}
+library(e1071)
+set.seed(12345)
+spam_ham_classifier <- naiveBayes(train,spam_dtrain_label) 
+
+
+pred <- predict(spam_ham_classifier, test) 
+
+```
+
+## Confusion Matrix
+```{r}
+#library(caret)
+#conf<- confusionMatrix(pred, spam_dtest_label)
+#conf
+
+#confusion_matrix <- as.data.frame(table(pred, spam_dtest_label))
+
+
+#print("the accuracy of this model is 97%")
+```
+
